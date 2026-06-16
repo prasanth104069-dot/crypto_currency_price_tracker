@@ -30,7 +30,7 @@ MAX_PRICE = None          # e.g. 50000.0 — only coins priced below this value
 MIN_CHANGE_24H = None     # e.g. 2.0 — only coins with 24h change > 2%
 MAX_CHANGE_24H = None     # e.g. -1.0 — only coins with 24h change < -1%
 
-OUTPUT_FILE = "crypto_prices.csv"   # CSV file to save/append data
+OUTPUT_FILE = "crypto_prices.csv"   # CSV file to save data
 
 # ─────────────────────────────────────────────
 
@@ -73,7 +73,7 @@ def create_driver(headless: bool) -> webdriver.Chrome:
     return driver
 
 
-def scrape_crypto_data(driver: webdriver.Chrome, top_n: int) -> list[dict]:
+def scrape_crypto_data(driver: webdriver.Chrome, top_n: int) -> list:
     """Navigate to CoinMarketCap and scrape top N coin data."""
     url = "https://coinmarketcap.com/"
     print(f"[INFO] Loading {url} ...")
@@ -90,7 +90,10 @@ def scrape_crypto_data(driver: webdriver.Chrome, top_n: int) -> list[dict]:
     coins = []
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    for row in rows[:top_n]:
+    # Scrape extra rows to ensure we get exactly top_n valid coins
+    for row in rows[:top_n + 10]:
+        if len(coins) == top_n:
+            break
         try:
             cells = row.find_elements(By.TAG_NAME, "td")
             if len(cells) < 8:
@@ -98,6 +101,8 @@ def scrape_crypto_data(driver: webdriver.Chrome, top_n: int) -> list[dict]:
 
             # Rank
             rank = cells[1].text.strip()
+            if not rank:
+                continue
 
             # Name & Symbol
             name_cell = cells[2].text.strip().split("\n")
@@ -129,12 +134,13 @@ def scrape_crypto_data(driver: webdriver.Chrome, top_n: int) -> list[dict]:
             print(f"[WARN] Skipped a row due to parse error: {e}")
             continue
 
+    print(f"[INFO] Successfully extracted {len(coins)} coins.")
     return coins
 
 
-def apply_filters(coins: list[dict]) -> list[dict]:
+def apply_filters(coins: list) -> list:
     """Apply user-defined price and change filters."""
-    filtered = coins
+    filtered = list(coins)
 
     if MIN_PRICE is not None:
         filtered = [c for c in filtered if c["Price (USD)"] >= MIN_PRICE]
@@ -152,20 +158,14 @@ def apply_filters(coins: list[dict]) -> list[dict]:
     return filtered
 
 
-def save_to_csv(coins: list[dict], filepath: str):
-    """Append coin data to CSV (creates file if it doesn't exist)."""
+def save_to_csv(coins: list, filepath: str):
+    """Save only the latest 10 coins to CSV (overwrites each run)."""
     df = pd.DataFrame(coins)
-    file_exists = os.path.isfile(filepath)
-
-    df.to_csv(filepath, mode="a", header=not file_exists, index=False)
-
-    if file_exists:
-        print(f"[CSV] Data appended to '{filepath}' (historical logging).")
-    else:
-        print(f"[CSV] New file created: '{filepath}'.")
+    df.to_csv(filepath, mode="w", index=False)
+    print(f"[CSV] Data saved to '{filepath}' (latest {len(coins)} coins).")
 
 
-def display_results(coins: list[dict]):
+def display_results(coins: list):
     """Print a formatted table of results to the console."""
     if not coins:
         print("[INFO] No coins to display after filtering.")
@@ -196,8 +196,8 @@ def main():
         coins = scrape_crypto_data(driver, TOP_N)
 
         if not HEADLESS:
-            print("[INFO] keeping browser open for 7 seconds...")
-            time.sleep(7)
+            print("[INFO] Keeping browser open for 8 seconds...")
+            time.sleep(8)
     finally:
         driver.quit()
         print("[INFO] Browser closed.")
@@ -212,7 +212,7 @@ def main():
     # Display in console
     display_results(coins)
 
-    # Save to CSV (with historical logging via append mode)
+    # Save to CSV (overwrites with latest 10 coins)
     if coins:
         save_to_csv(coins, OUTPUT_FILE)
 
@@ -221,3 +221,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
