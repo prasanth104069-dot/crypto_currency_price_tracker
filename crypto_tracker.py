@@ -6,6 +6,7 @@ Features: CSV export, historical logging, price/change filtering, headless toggl
 
 import time
 import os
+import glob
 import pandas as pd
 from datetime import datetime
 from selenium import webdriver
@@ -35,6 +36,17 @@ OUTPUT_FILE = "crypto_prices.csv"   # CSV file to save data
 # ─────────────────────────────────────────────
 
 
+def clear_wdm_locks():
+    """Delete any stuck webdriver-manager lock files."""
+    lock_pattern = os.path.expanduser(r"~\.wdm\.wdm-lock-*")
+    for lock in glob.glob(lock_pattern):
+        try:
+            os.remove(lock)
+            print(f"[INFO] Removed stuck lock file: {lock}")
+        except Exception:
+            pass
+
+
 def create_driver(headless: bool) -> webdriver.Chrome:
     """Create and configure a Chrome WebDriver with stealth settings."""
     options = Options()
@@ -56,6 +68,9 @@ def create_driver(headless: bool) -> webdriver.Chrome:
     )
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
+
+    # Auto-delete stuck lock files before launching
+    clear_wdm_locks()
 
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
@@ -221,4 +236,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
